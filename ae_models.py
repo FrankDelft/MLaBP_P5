@@ -2,8 +2,17 @@ import keras
 from keras import layers
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import CSVLogger
+import vcae_fmnist
+import vcae_cifar
+import torch
+import os
+from tqdm import tqdm
+import numpy as np
 
 latent_dim = 12
+capacity=64
+device = torch.device("cpu")
+learning_rate = 1e-3
 
 def get_AE_CIFAR_model():
     # Create the encoder
@@ -24,7 +33,7 @@ def get_AE_CIFAR_model():
 
     # Create the autoencoder
     autoencoder_cifar = keras.Model(encoder_input, decoder(encoder(encoder_input)))
-    autoencoder_cifar.compile(optimizer='adam', loss='mse')
+    autoencoder_cifar.compile(optimizer='adam', loss='mean_squared_error')
     autoencoder_cifar.summary()
 
     return autoencoder_cifar
@@ -104,6 +113,11 @@ def get_CAE_CIFAR_Model():
     autoencoder.compile(optimizer='adam', loss='mse')
     return autoencoder
 
+def get_VCAE_CIFAR_model():
+    vae = vcae_cifar.VariationalAutoencoder(hidden_channels=capacity, latent_dim=latent_dim)
+    vae = vae.to(device)
+    return  vae
+
 def train_model(model, model_name, x_train, validation):
     checkpoint_path = f"./training_checkpoints/{model_name}/"
     checkpoint_path += "{epoch:03d}-{val_loss:.4f}.keras"
@@ -122,3 +136,89 @@ def train_model(model, model_name, x_train, validation):
                     validation_data=(validation, validation),
                     callbacks=[csv_logger, cp_callback])
     return model
+
+def train_torch_model(model, model_name, train_dataloader):
+
+    num_epochs = 20
+    checkpoint_path = f"./training_checkpoints/{model_name}/"
+    model = model.to(device)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=1e-5) 
+
+
+    model.train()
+
+    train_loss_avg = []
+    mse_loss_avg = []
+
+
+    tqdm_bar = tqdm(range(1, num_epochs+1), desc="epoch [loss: ...]")
+    # tqdm_iter = trange(1, num_epochs+1, desc="epoch [loss: ...]")
+    for epoch in tqdm_bar:
+        train_loss_averager = vcae_cifar.make_averager()
+        mse_loss_averager = vcae_cifar.make_averager()
+
+        batch_bar =  tqdm(train_dataloader, leave=False, desc='batch', total=len(train_dataloader))
+        for image_batch, _ in batch_bar:
+
+            image_batch = image_batch.to(device)
+
+            # vae reconstruction
+            image_batch_recon, latent_mu, latent_logvar = model(image_batch)
+
+            # total loss and mse loss
+            total_loss, mse_loss_val = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+    
+            mse_loss_averager(mse_loss_val.item())  # Add the current MSE loss to the averager
+            
+
+            # backpropagation
+            optimizer.zero_grad()
+            total_loss.backward()
+
+            # one step of the optmizer
+            optimizer.step()
+
+            vcae_cifar.refresh_bar(batch_bar, f"train batch [loss: {train_loss_averager(total_loss.item()):.3f}]")
+            vcae_cifar.refresh_bar(batch_bar, f"epoch [mse_loss: {mse_loss_averager(None):.3f}]")  # Print the average MSE loss for this epoch
+            
+
+        vcae_cifar.refresh_bar(tqdm_bar, f"epoch [total loss: {train_loss_averager(None):.3f}, mse loss: {mse_loss_averager(None):.3f}]")
+    
+
+        train_loss_avg.append(train_loss_averager(None))
+        mse_loss_avg.append(mse_loss_averager(None))
+
+        # Save the model at the end of each epoch
+        # Define the directory path
+        directory = "training_checkpoints"
+
+
+        # Save the model state and other parameters/metrics
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'total_loss': train_loss_averager(None),
+            'mse_loss': mse_loss_averager(None),
+        }, os.path.join(directory, f'vae_epoch_{epoch}_'+model_name+'.pth'))
+
+
+    return model
+
+def torch_predict(model,test_dataloader):
+    model.eval()
+    test_loss_averager = vcae_cifar.make_averager()
+    images_recon = torch.Tensor().cpu()
+    with torch.no_grad():
+        test_bar = tqdm(test_dataloader, total=len(test_dataloader), desc = 'batch [loss: ...]')
+        for image_batch, _ in test_bar:
+            image_batch = image_batch.to(device)
+
+            # vae reconstruction
+            image_batch_recon, latent_mu, latent_logvar = model(image_batch)
+            images_recon = torch.cat((images_recon, image_batch_recon.cpu()), 0)
+            # reconstruction error
+            loss,mse_loss = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+
+            vcae_cifar.refresh_bar(test_bar, f"test batch [loss: {test_loss_averager(loss.item()):.3f}]")
+    return np.transpose(images_recon,(0,2,3,1))
