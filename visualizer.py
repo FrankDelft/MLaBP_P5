@@ -4,6 +4,9 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import numpy as np
+from ae_models import torch_predict
+from tqdm import tqdm
+import torch
 
 def plot_all(data, components:int):
 
@@ -24,11 +27,14 @@ def plot_all(data, components:int):
     plt.plot(TSNE_embedding)
     plt.plot(PCA_embedding)
 
-def compare_CIFAR(x_test, autoencoder):
+def compare_CIFAR(x_test, autoencoder,*args):
+    if len(args) > 0:
+        images = torch_predict(autoencoder, args[0])
+        
+    else:
+        images = autoencoder.predict(x_test)
     # Select 10 indices
     indices = np.arange(10, 20)
-
-    images = autoencoder.predict(x_test)
 
     # Plot the input vs output images
     fig, axes = plt.subplots(nrows=2, ncols=10, figsize=(20, 4))
@@ -46,8 +52,12 @@ def compare_CIFAR(x_test, autoencoder):
     plt.show()
 
 
-def compare_FMNIST(x_test, autoencoder):
-    decoded_imgs = autoencoder.predict(x_test)
+def compare_FMNIST(x_test, autoencoder,*args):
+    if len(args) > 0:
+        decoded_imgs = torch_predict(autoencoder, args[0])
+
+    else:
+        decoded_imgs = autoencoder.predict(x_test)
 
     n = 10
     plt.figure(figsize=(20, 4))
@@ -66,7 +76,7 @@ def compare_FMNIST(x_test, autoencoder):
     plt.tight_layout()
     plt.show()
 
-def compare_fmnist_models(models, image):
+def compare_fmnist_models(models, image,*args):
     n = len(models)+1
     image = image.reshape(1,28,28,1)
     plt.figure(figsize=(2*n, 2))
@@ -79,8 +89,11 @@ def compare_fmnist_models(models, image):
 
     for i, m in enumerate(models):
         # Display original
-
-
+        if(i<len(models)-1):
+            decoded_img =  m[0].predict(image.reshape(-1,3072) if m[2] else image)
+        else:
+            decoded_img=torch_predict(m[0],args[0])
+            decoded_img=decoded_img[args[1]+3]
         decoded_img =  m[0].predict(image.reshape(-1,784) if m[2] else image)
 
         # Display reconstruction
@@ -92,7 +105,7 @@ def compare_fmnist_models(models, image):
     plt.tight_layout()
     plt.show()
 
-def compare_cifar_models(models, image):
+def compare_cifar_models(models, image,*args):
     n = len(models)+1
     image = image.reshape(1,32,32,3)
     plt.figure(figsize=(2*n, 2))
@@ -105,10 +118,13 @@ def compare_cifar_models(models, image):
 
     for i, m in enumerate(models):
         # Display original
-
-
-        decoded_img =  m[0].predict(image.reshape(-1,3072) if m[2] else image)
-
+        if(i<len(models)-1):
+            decoded_img =  m[0].predict(image.reshape(-1,3072) if m[2] else image)
+        else:
+            decoded_img=torch_predict(m[0],args[0])
+            decoded_img=decoded_img[args[1]+3]
+        
+        
         # Display reconstruction
         ax = plt.subplot(1, n, i+2)
         plt.imshow(decoded_img.reshape(32, 32, 3))
