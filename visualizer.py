@@ -54,7 +54,7 @@ def compare_CIFAR(x_test, autoencoder,*args):
 
 def compare_FMNIST(x_test, autoencoder,*args):
     if len(args) > 0:
-        decoded_imgs = torch_predict(autoencoder, args[0])
+        decoded_imgs = torch_predict(autoencoder, args[0],fmnist=True)
 
     else:
         decoded_imgs = autoencoder.predict(x_test)
@@ -90,11 +90,11 @@ def compare_fmnist_models(models, image,*args):
     for i, m in enumerate(models):
         # Display original
         if(i<len(models)-1):
-            decoded_img =  m[0].predict(image.reshape(-1,3072) if m[2] else image)
+            decoded_img =  m[0].predict(image.reshape(-1,784) if m[2] else image)
         else:
-            decoded_img=torch_predict(m[0],args[0])
+            decoded_img=torch_predict(m[0],args[0],fmnist=True)
             decoded_img=decoded_img[args[1]+3]
-        decoded_img =  m[0].predict(image.reshape(-1,784) if m[2] else image)
+
 
         # Display reconstruction
         ax = plt.subplot(1, n, i+2)

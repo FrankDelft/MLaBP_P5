@@ -4,85 +4,49 @@ import torch.nn.functional as F
 import torch.optim as optim
 from typing import Callable, Optional
 
-
 class Encoder_cifar(nn.Module):
     def __init__(self, hidden_channels: int, latent_dim: int) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels=3,
-                               out_channels=hidden_channels,
-                               kernel_size=3,
-                               stride=2,
-                               padding=1) # out: hidden_channels x 16 x 16
-
-        self.conv2 = nn.Conv2d(in_channels=hidden_channels,
-                               out_channels=hidden_channels*2,
-                               kernel_size=3,
-                               stride=2,
-                               padding=1) # out: (hidden_channels x 2) x 8 x 8
-
-        self.conv3 = nn.Conv2d(in_channels=hidden_channels*2,
-                               out_channels=hidden_channels*4,
-                               kernel_size=3,
-                               padding=1) # out: (hidden_channels x 4) x 8 x 8
-
-        self.fc_mu = nn.Linear(in_features=hidden_channels*4*8*8,
-                               out_features=latent_dim)
-        self.fc_logvar = nn.Linear(in_features=hidden_channels*4*8*8,
-                                   out_features=latent_dim)
-
-        self.activation = nn.ReLU()
-
+        self.conv1 = nn.Conv2d(3, hidden_channels, 3, padding=1)
+        self.pool1 = nn.MaxPool2d(2)
+        self.conv2 = nn.Conv2d(hidden_channels, hidden_channels*2, 3, padding=1)
+        self.pool2 = nn.MaxPool2d(2)
+        self.conv3 = nn.Conv2d(hidden_channels*2, hidden_channels*4, 3, padding=1)
+        # After conv3, the feature map size is 8x8, given input images are 32x32.
+        self.flatten = nn.Flatten()
+        self.fc_mu = nn.Linear(hidden_channels*4*8*8, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_channels*4*8*8, latent_dim)
+        
     def forward(self, x: torch.Tensor):
-        x = self.activation(self.conv1(x))
-        x = self.activation(self.conv2(x))
-        x = self.activation(self.conv3(x))
-
-        x = x.view(x.shape[0], -1)
-
+        x = F.relu(self.pool1(self.conv1(x)))
+        x = F.relu(self.pool2(self.conv2(x)))
+        x = F.relu(self.conv3(x))
+        x = self.flatten(x)
         x_mu = self.fc_mu(x)
         x_logvar = self.fc_logvar(x)
-
         return x_mu, x_logvar
-
 
 class Decoder_cifar(nn.Module):
     def __init__(self, hidden_channels: int, latent_dim: int) -> None:
         super().__init__()
-        self.hidden_channels = hidden_channels
+        self.fc = nn.Linear(latent_dim, hidden_channels*4*8*8)
+        self.reshape = nn.Unflatten(1, (hidden_channels*4, 8, 8))
+        self.conv3 = nn.ConvTranspose2d(hidden_channels*4, hidden_channels*2, 3, stride=1, padding=1)
+        self.up1 = nn.Upsample(scale_factor=2, mode='nearest')
+        self.conv2 = nn.ConvTranspose2d(hidden_channels*2, hidden_channels, 3, stride=1, padding=1)
+        self.up2 = nn.Upsample(scale_factor=2, mode='nearest')
+        self.conv1 = nn.ConvTranspose2d(hidden_channels, 3, 3, stride=1, padding=1)
+        
+    def forward(self, z: torch.Tensor):
+        z = F.relu(self.fc(z))
+        z = self.reshape(z)
+        z = F.relu(self.conv3(z))
+        z = self.up1(z)
+        z = F.relu(self.conv2(z))
+        z = self.up2(z)
+        z = torch.sigmoid(self.conv1(z))
+        return z
 
-        self.fc = nn.Linear(in_features=latent_dim,
-                            out_features=hidden_channels*4*8*8)
-
-        self.conv3 = nn.ConvTranspose2d(in_channels=hidden_channels*4,
-                                        out_channels=hidden_channels*2,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
-
-        self.conv2 = nn.ConvTranspose2d(in_channels=hidden_channels*2,
-                                        out_channels=hidden_channels,
-                                        kernel_size=3,
-                                        stride=2,
-                                        padding=1,
-                                        output_padding=1)
-
-        self.conv1 = nn.ConvTranspose2d(in_channels=hidden_channels,
-                                        out_channels=3,
-                                        kernel_size=3,
-                                        stride=2,
-                                        padding=1,
-                                        output_padding=1)
-
-        self.activation = nn.ReLU()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc(x)
-        x = x.view(x.size(0), self.hidden_channels*4, 8, 8)
-        x = self.activation(self.conv3(x))
-        x = self.activation(self.conv2(x))
-        x = torch.sigmoid(self.conv1(x)) # last layer before output is sigmoid
-        return x
-    
 class VariationalAutoencoder(nn.Module):
     def __init__(self, hidden_channels: int, latent_dim: int):
         super().__init__()

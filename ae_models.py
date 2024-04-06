@@ -10,23 +10,24 @@ from tqdm import tqdm
 import numpy as np
 
 latent_dim = 12
-capacity=64
+capacity=40
 device = torch.device("cpu")
 learning_rate = 1e-3
+num_epochs = 40
 
 def get_AE_CIFAR_model():
     # Create the encoder
     encoder_input = keras.Input(shape=(32*32*3,))
-    encoded1 = layers.Dense(580, activation='relu')(encoder_input)
-    encoded2 = layers.Dense(256, activation='relu')(encoded1)
+    encoded1 = layers.Dense(300, activation='relu')(encoder_input)
+    encoded2 = layers.Dense(128, activation='relu')(encoded1)
     encoded3 = layers.Dense(latent_dim, activation='relu')(encoded2)
     encoder = keras.Model(encoder_input, encoded3)
     encoder.summary()
 
     # Create the decoder
     decoder_input = keras.Input(shape=(latent_dim,))
-    decoded1 = layers.Dense(256, activation='sigmoid')(decoder_input)
-    decoded2 = layers.Dense(580, activation='sigmoid')(decoded1)
+    decoded1 = layers.Dense(300, activation='sigmoid')(decoder_input)
+    decoded2 = layers.Dense(128, activation='sigmoid')(decoded1)
     decoded3 = layers.Dense(32*32*3, activation='sigmoid')(decoded2)
     decoder = keras.Model(decoder_input, decoded3)
     decoder.summary()
@@ -40,16 +41,16 @@ def get_AE_CIFAR_model():
 
 def get_AE_FMNIST_model():
     encoder_input = keras.Input(shape=(784,))
-    encoded1 = layers.Dense(580, activation='relu')(encoder_input)
-    encoded2 = layers.Dense(256, activation='relu')(encoded1)
+    encoded1 = layers.Dense(300, activation='relu')(encoder_input)
+    encoded2 = layers.Dense(128, activation='relu')(encoded1)
     encoded3 = layers.Dense(latent_dim, activation='relu')(encoded2)
     encoder = keras.Model(encoder_input, encoded3)
     encoder.summary()
 
     # Create the decoder
     decoder_input = keras.Input(shape=(latent_dim,))
-    decoded1 = layers.Dense(256, activation='sigmoid')(decoder_input)
-    decoded2 = layers.Dense(580, activation='sigmoid')(decoded1)
+    decoded1 = layers.Dense(128, activation='sigmoid')(decoder_input)
+    decoded2 = layers.Dense(300, activation='sigmoid')(decoded1)
     decoded3 = layers.Dense(784, activation='sigmoid')(decoded2)
     decoder = keras.Model(decoder_input, decoded3)
     decoder.summary()
@@ -64,24 +65,43 @@ def get_AE_FMNIST_model():
 def get_CAE_FMNIST_Model():
     input_img = keras.Input(shape=(28, 28, 1))
 
-    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(input_img)
-    x = layers.MaxPooling2D((2, 2), padding='same')(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2), padding='same')(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2), padding='same')(x)
-    x = layers.Flatten()(x)
-    encoded = layers.Dense(12, activation='relu')(x)
+    # x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(input_img)
+    # x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    # x = layers.Flatten()(x)
+    # encoded = layers.Dense(12, activation='relu')(x)
 
-    x = layers.Dense(128, activation='relu')(encoded)
-    x = layers.Reshape((4, 4, 8))(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.Dense(128, activation='relu')(encoded)
+    # x = layers.Reshape((4, 4, 8))(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.UpSampling2D((2, 2))(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.UpSampling2D((2, 2))(x)
+    # x = layers.Conv2D(16, (3, 3), activation='relu')(x)
+    # x = layers.UpSampling2D((2, 2))(x)
+    # decoded = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
+
+    # Encoder
+    x = layers.Conv2D(capacity, (4, 4), activation='relu', padding='same')(input_img)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(capacity*2, (4, 4), activation='relu', padding='same')(x)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(capacity*4, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Flatten()(x)
+    encoded = layers.Dense(12, activation='relu')(x)  # output dimension of the encoder is 12
+
+    # Decoder
+    x = layers.Dense(capacity*4*7*7, activation='relu')(encoded)
+    x = layers.Reshape((7, 7, capacity*4))(x)
+    x = layers.Conv2DTranspose(capacity*2, (3, 3), activation='relu', padding='same')(x)
     x = layers.UpSampling2D((2, 2))(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Conv2DTranspose(capacity, (4, 4), activation='relu', padding='same')(x)
     x = layers.UpSampling2D((2, 2))(x)
-    x = layers.Conv2D(16, (3, 3), activation='relu')(x)
-    x = layers.UpSampling2D((2, 2))(x)
-    decoded = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
+    x = layers.Conv2DTranspose(1, (4, 4), activation='sigmoid', padding='same')(x)
+    decoded = x
 
     autoencoder = keras.Model(input_img, decoded)
     autoencoder.compile(optimizer='adam', loss='mse')
@@ -90,24 +110,44 @@ def get_CAE_FMNIST_Model():
 def get_CAE_CIFAR_Model():
     input_img = keras.Input(shape=(32, 32, 3))
 
-    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(input_img)
-    x = layers.MaxPooling2D((2, 2), padding='same')(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2), padding='same')(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
-    x = layers.MaxPooling2D((2, 2), padding='same')(x)
-    x = layers.Flatten()(x)
-    encoded = layers.Dense(12, activation='relu')(x)
+    # x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(input_img)
+    # x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    # x = layers.Flatten()(x)
+    # encoded = layers.Dense(12, activation='relu')(x)
 
-    x = layers.Dense(128, activation='relu')(encoded)
-    x = layers.Reshape((4, 4, 8))(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.Dense(128, activation='relu')(encoded)
+    # x = layers.Reshape((4, 4, 8))(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.UpSampling2D((2, 2))(x)
+    # x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    # x = layers.UpSampling2D((2, 2))(x)
+    # x = layers.Conv2D(16, (3, 3), activation='relu',padding='same')(x)
+    # x = layers.UpSampling2D((2, 2))(x)
+    # decoded = layers.Conv2D(3, (3, 3), activation='sigmoid', padding='same')(x)
+
+    # Encoder
+    x = layers.Conv2D(capacity, (3, 3), activation='relu', padding='same')(input_img)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(capacity*2, (3, 3), activation='relu', padding='same')(x)
+    x = layers.MaxPooling2D((2, 2), padding='same')(x)
+    x = layers.Conv2D(capacity*4, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Flatten()(x)
+    encoded = layers.Dense(12, activation='relu')(x)  # output dimension of the encoder is 12
+
+    # Decoder
+    x = layers.Dense(capacity*4*8*8, activation='relu')(encoded)
+    x = layers.Reshape((8, 8, capacity*4))(x)
+    x = layers.Conv2DTranspose(capacity*2, (3, 3), activation='relu', padding='same')(x)
     x = layers.UpSampling2D((2, 2))(x)
-    x = layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Conv2DTranspose(capacity, (3, 3), activation='relu', padding='same')(x)
     x = layers.UpSampling2D((2, 2))(x)
-    x = layers.Conv2D(16, (3, 3), activation='relu',padding='same')(x)
-    x = layers.UpSampling2D((2, 2))(x)
-    decoded = layers.Conv2D(3, (3, 3), activation='sigmoid', padding='same')(x)
+    x = layers.Conv2DTranspose(3, (3, 3), activation='sigmoid', padding='same')(x)
+    decoded = x
+
 
     autoencoder = keras.Model(input_img, decoded)
     autoencoder.compile(optimizer='adam', loss='mse')
@@ -115,6 +155,11 @@ def get_CAE_CIFAR_Model():
 
 def get_VCAE_CIFAR_model():
     vae = vcae_cifar.VariationalAutoencoder(hidden_channels=capacity, latent_dim=latent_dim)
+    vae = vae.to(device)
+    return  vae
+
+def get_VCAE_FMNST_model():
+    vae = vcae_fmnist.VariationalAutoencoder_FMNIST(hidden_channels=capacity, latent_dim=latent_dim)
     vae = vae.to(device)
     return  vae
 
@@ -130,16 +175,16 @@ def train_model(model, model_name, x_train, validation):
     csv_logger = CSVLogger(f'./losses/{model_name}_losses.csv', append=True, separator=',')
 
     model.fit(x_train, x_train,
-                    epochs=20,
+                    epochs=num_epochs,
                     batch_size=128,
                     shuffle=True,
                     validation_data=(validation, validation),
                     callbacks=[csv_logger, cp_callback])
     return model
 
-def train_torch_model(model, model_name, train_dataloader):
+def train_torch_model(model, model_name, train_dataloader,fmnist=False):
 
-    num_epochs = 20
+    
     checkpoint_path = f"./training_checkpoints/{model_name}/"
     model = model.to(device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=1e-5) 
@@ -166,7 +211,10 @@ def train_torch_model(model, model_name, train_dataloader):
             image_batch_recon, latent_mu, latent_logvar = model(image_batch)
 
             # total loss and mse loss
-            total_loss, mse_loss_val = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+            if(fmnist):
+                total_loss, mse_loss_val = vcae_fmnist.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+            else:
+                total_loss, mse_loss_val = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
     
             mse_loss_averager(mse_loss_val.item())  # Add the current MSE loss to the averager
             
@@ -205,7 +253,7 @@ def train_torch_model(model, model_name, train_dataloader):
 
     return model
 
-def torch_predict(model,test_dataloader):
+def torch_predict(model,test_dataloader,fmnist=False):
     model.eval()
     test_loss_averager = vcae_cifar.make_averager()
     images_recon = torch.Tensor().cpu()
@@ -218,7 +266,10 @@ def torch_predict(model,test_dataloader):
             image_batch_recon, latent_mu, latent_logvar = model(image_batch)
             images_recon = torch.cat((images_recon, image_batch_recon.cpu()), 0)
             # reconstruction error
-            loss,mse_loss = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+            if(fmnist):
+                loss,mse_loss = vcae_fmnist.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+            else:
+                loss,mse_loss = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
 
             vcae_cifar.refresh_bar(test_bar, f"test batch [loss: {test_loss_averager(loss.item()):.3f}]")
     return np.transpose(images_recon,(0,2,3,1))
