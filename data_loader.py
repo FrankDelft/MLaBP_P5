@@ -7,6 +7,8 @@ from torchvision.datasets import FashionMNIST
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
+CIFAR10_label_txts = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
+MNIST_label_txts = ["T-shirt/top", "Trouser", "Pullover", "Dress", "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"]
 
 
 def get_cifar10():
