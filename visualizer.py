@@ -23,9 +23,9 @@ def plot_all(data, components:int):
     PCA_embedding = pca_reducer.fit_transform(data)
     print(PCA_embedding.shape)
 
-    plt.plot(UMAP_embedding)
-    plt.plot(TSNE_embedding)
-    plt.plot(PCA_embedding)
+    plt.scatter(UMAP_embedding[:,0],UMAP_embedding[:,1])
+    # plt.scatter(TSNE_embedding)
+    # plt.scatter(PCA_embedding)
 
 def compare_CIFAR(x_test, autoencoder,*args):
     if len(args) > 0:

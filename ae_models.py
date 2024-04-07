@@ -36,6 +36,7 @@ def get_AE_CIFAR_model():
     autoencoder_cifar = keras.Model(encoder_input, decoder(encoder(encoder_input)))
     autoencoder_cifar.compile(optimizer='adam', loss='mean_squared_error')
     autoencoder_cifar.summary()
+    
 
     return autoencoder_cifar
 
@@ -183,8 +184,7 @@ def train_model(model, model_name, x_train, validation):
     return model
 
 def train_torch_model(model, model_name, train_dataloader,fmnist=False):
-
-    
+   
     checkpoint_path = f"./training_checkpoints/{model_name}/"
     model = model.to(device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=1e-5) 
@@ -273,3 +273,37 @@ def torch_predict(model,test_dataloader,fmnist=False):
 
             vcae_cifar.refresh_bar(test_bar, f"test batch [loss: {test_loss_averager(loss.item()):.3f}]")
     return np.transpose(images_recon,(0,2,3,1))
+
+
+def extract_latent(model,test_dataloader,fmnist=False):
+    model.eval()
+    test_loss_averager = vcae_cifar.make_averager()
+    latents = torch.Tensor().cpu()
+    with torch.no_grad():
+        test_bar = tqdm(test_dataloader, total=len(test_dataloader), desc = 'batch [loss: ...]')
+        for image_batch, _ in test_bar:
+            image_batch = image_batch.to(device)
+
+            # vae reconstruction
+            image_batch_recon, latent_mu, latent_logvar = model(image_batch)
+            latents = torch.cat((latents, latent_mu.cpu()), 0)
+            # reconstruction error
+            if(fmnist):
+                loss,mse_loss = vcae_fmnist.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+            else:
+                loss,mse_loss = vcae_cifar.vae_loss(image_batch_recon, image_batch, latent_mu, latent_logvar)
+
+            vcae_cifar.refresh_bar(test_bar, f"test batch [loss: {test_loss_averager(loss.item()):.3f}]")
+    return latents  
+
+def load_torch_model(model_dir,fmnist=False):
+    if(fmnist):
+        vae = vcae_fmnist.VariationalAutoencoder_FMNIST(hidden_channels=capacity, latent_dim=latent_dim)
+    else:
+        vae = vcae_cifar.VariationalAutoencoder(hidden_channels=capacity, latent_dim=latent_dim)
+        
+    
+    checkpoint = torch.load(model_dir)
+    vae.load_state_dict(checkpoint['model_state_dict'])
+    vae.eval()
+    return vae
